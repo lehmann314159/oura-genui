@@ -1,40 +1,33 @@
 import { anthropic } from '@ai-sdk/anthropic'
-import { streamText } from 'ai'
+import { streamText, stepCountIs } from 'ai'
+import { createMCPClient } from '@ai-sdk/mcp'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 export const maxDuration = 60
 
-const SYSTEM_PROMPT = `You are a helpful health assistant that analyzes Oura Ring data.
+function getSystemPrompt() {
+  const today = new Date().toISOString().split('T')[0]
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
 
-For this demo, use the following sample data when the user asks about their health:
+  return `You are a helpful health assistant that analyzes Oura Ring data.
 
-SAMPLE SLEEP DATA (last night):
-- Total sleep: 7 hours 21 minutes
-- Deep sleep: 1 hour 10 minutes (70 min)
-- REM sleep: 1 hour 8 minutes (68 min)
-- Light sleep: 5 hours 2 minutes (302 min)
-- Awake time: 15 minutes
-- Sleep efficiency: 87%
-- Bedtime: 10:45 PM
-- Wake time: 6:30 AM
-- Average heart rate: 52 bpm
-- HRV: 45 ms
+Today's date is ${today}. Yesterday was ${yesterday}.
 
-SAMPLE READINESS DATA:
-- Readiness score: 82
-- Sleep score: 85
-- Activity balance: Good
-- Body temperature: Normal (+0.1°C)
-- Recovery index: High
+IMPORTANT: Oura attributes sleep data to the DAY YOU WAKE UP, not when you went to bed.
+So "last night's sleep" is stored under TODAY's date (${today}), not yesterday.
+When querying sleep data, always use a date RANGE (e.g., start_date: yesterday, end_date: today) rather than a single date to ensure you capture the data.
 
-SAMPLE ACTIVITY DATA (today):
-- Steps: 8,432
-- Calories burned: 2,150
-- Active time: 45 minutes
-- Walking equivalent: 4.2 miles
+You have access to tools that fetch real data from the user's Oura Ring:
+- get_sleep_data: Get sleep metrics including stages, efficiency, heart rate
+- get_activity_data: Get daily activity including steps, calories, active time
+- get_readiness_data: Get readiness scores and contributing factors
+- get_heart_rate_data: Get heart rate data throughout the day
+- get_workout_data: Get workout and exercise session data
 
-When responding:
-1. Provide a brief, friendly analysis of the data
-2. Generate UI components to visualize the data by including a JSON code block
+When the user asks about their health data:
+1. Call the appropriate tool(s) to fetch real data
+2. Analyze the data and provide a friendly summary
+3. Generate UI components to visualize the data by including a JSON code block
 
 Available UI components:
 
@@ -80,7 +73,10 @@ Example response format:
 \`\`\`
 "
 
-Always be conversational and include visualizations for health data queries.`
+Always be conversational and include visualizations for health data queries.
+When fetching data, use appropriate date ranges (e.g., yesterday for "last night's sleep", last 7 days for trends).
+IMPORTANT: After receiving tool results, always analyze the data and provide a helpful response with UI components.`
+}
 
 // Convert UI SDK message format (parts) to standard AI SDK format (content)
 function convertMessages(messages: Array<{ role: string; parts?: Array<{ type: string; text?: string }>; content?: string }>) {
@@ -106,11 +102,38 @@ export async function POST(request: Request) {
 
   const convertedMessages = convertMessages(messages)
 
-  const result = streamText({
-    model: anthropic('claude-sonnet-4-20250514'),
-    system: SYSTEM_PROMPT,
-    messages: convertedMessages,
+  // Create MCP client connected to the Oura MCP server
+  const transport = new StdioClientTransport({
+    command: 'node',
+    args: [process.env.OURA_MCP_SERVER_PATH!],
+    env: {
+      ...process.env as Record<string, string>,
+      OURA_PERSONAL_ACCESS_TOKEN: process.env.OURA_PERSONAL_ACCESS_TOKEN!,
+    },
   })
 
-  return result.toUIMessageStreamResponse()
+  const mcpClient = await createMCPClient({
+    transport,
+  })
+
+  try {
+    // Get tools from the MCP server
+    const tools = await mcpClient.tools()
+
+    const result = streamText({
+      model: anthropic('claude-sonnet-4-20250514'),
+      system: getSystemPrompt(),
+      messages: convertedMessages,
+      tools,
+      stopWhen: stepCountIs(5), // Allow up to 5 steps for tool calls
+      onFinish: async () => {
+        await mcpClient.close()
+      },
+    })
+
+    return result.toUIMessageStreamResponse()
+  } catch (error) {
+    await mcpClient.close()
+    throw error
+  }
 }
