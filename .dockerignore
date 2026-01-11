@@ -1,0 +1,36 @@
+# Dependencies
+node_modules
+
+# MCP Server (separate Docker build)
+mcp-server
+
+# Build outputs
+.next
+mcp-server/build
+
+# Development
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Misc
+README.md
+*.md
+.DS_Store
+npm-debug.log*

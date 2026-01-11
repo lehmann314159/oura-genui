@@ -1,0 +1,24 @@
+# Dependencies
+node_modules
+
+# Build outputs
+build
+
+# Development
+.env.local
+
+# IDE
+.idea
+.vscode
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile*
+.dockerignore
+
+# Misc
+*.md
+.DS_Store

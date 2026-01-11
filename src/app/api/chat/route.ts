@@ -1,9 +1,13 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { streamText, stepCountIs } from 'ai'
-import { createMCPClient } from '@ai-sdk/mcp'
+import { createMCPClient, type MCPTransport } from '@ai-sdk/mcp'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 
 export const maxDuration = 60
+
+// Use HTTP transport in production (Docker), stdio for local development
+const MCP_SERVER_URL = process.env.MCP_SERVER_URL
 
 function getSystemPrompt() {
   const today = new Date().toISOString().split('T')[0]
@@ -140,7 +144,7 @@ function convertMessages(messages: Array<{ role: string; parts?: Array<{ type: s
   return messages.map((msg) => {
     // If message already has content string, use it
     if (typeof msg.content === 'string') {
-      return { role: msg.role, content: msg.content }
+      return { role: msg.role as 'user' | 'assistant', content: msg.content }
     }
     // Convert parts array to content string
     if (msg.parts && Array.isArray(msg.parts)) {
@@ -148,9 +152,9 @@ function convertMessages(messages: Array<{ role: string; parts?: Array<{ type: s
         .filter((part) => part.type === 'text' && part.text)
         .map((part) => part.text)
         .join('')
-      return { role: msg.role, content }
+      return { role: msg.role as 'user' | 'assistant', content }
     }
-    return { role: msg.role, content: '' }
+    return { role: msg.role as 'user' | 'assistant', content: '' }
   })
 }
 
@@ -159,15 +163,23 @@ export async function POST(request: Request) {
 
   const convertedMessages = convertMessages(messages)
 
-  // Create MCP client connected to the Oura MCP server
-  const transport = new StdioClientTransport({
-    command: 'node',
-    args: [process.env.OURA_MCP_SERVER_PATH!],
-    env: {
-      ...process.env as Record<string, string>,
-      OURA_PERSONAL_ACCESS_TOKEN: process.env.OURA_PERSONAL_ACCESS_TOKEN!,
-    },
-  })
+  // Create transport: HTTP for production (Docker), stdio for local development
+  let transport: MCPTransport
+
+  if (MCP_SERVER_URL) {
+    // Production: Connect to MCP server via HTTP/SSE
+    transport = new SSEClientTransport(new URL(MCP_SERVER_URL))
+  } else {
+    // Local development: Spawn MCP server as subprocess
+    transport = new StdioClientTransport({
+      command: 'node',
+      args: [process.env.OURA_MCP_SERVER_PATH!],
+      env: {
+        ...process.env as Record<string, string>,
+        OURA_PERSONAL_ACCESS_TOKEN: process.env.OURA_PERSONAL_ACCESS_TOKEN!,
+      },
+    })
+  }
 
   const mcpClient = await createMCPClient({
     transport,
@@ -183,7 +195,7 @@ export async function POST(request: Request) {
       messages: convertedMessages,
       tools,
       stopWhen: stepCountIs(5), // Allow up to 5 steps for tool calls
-      maxTokens: 4096, // Limit output to leave room for large Oura API responses
+      maxOutputTokens: 4096, // Limit output to leave room for large Oura API responses
       onFinish: async () => {
         await mcpClient.close()
       },
