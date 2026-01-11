@@ -49,6 +49,63 @@ Available UI components:
   "awake": 15
 }
 
+3. line_chart - Show trends over time (great for weekly/monthly data)
+{
+  "type": "line_chart",
+  "title": "Readiness Trend This Week",
+  "data": [
+    { "date": "2026-01-05", "value": 82 },
+    { "date": "2026-01-06", "value": 78 },
+    { "date": "2026-01-07", "value": 85 }
+  ],
+  "yAxisLabel": "Score",
+  "color": "#6366f1"
+}
+
+4. readiness_breakdown - Show readiness score with all contributors (use when explaining readiness)
+{
+  "type": "readiness_breakdown",
+  "score": 87,
+  "contributors": {
+    "activity_balance": 93,
+    "body_temperature": 89,
+    "hrv_balance": 80,
+    "previous_day_activity": 92,
+    "previous_night": 94,
+    "recovery_index": 100,
+    "resting_heart_rate": 87,
+    "sleep_balance": 74
+  }
+}
+
+5. stat_comparison - Compare two values (this week vs last week, today vs yesterday)
+{
+  "type": "stat_comparison",
+  "title": "Sleep Duration Comparison",
+  "current": { "label": "This Week", "value": 7.5 },
+  "previous": { "label": "Last Week", "value": 6.8 },
+  "unit": "hours",
+  "higherIsBetter": true
+}
+
+6. sleep_timeline - Visual timeline of sleep stages throughout the night
+{
+  "type": "sleep_timeline",
+  "bedtime_start": "2026-01-10T23:00:00-07:00",
+  "bedtime_end": "2026-01-11T07:00:00-07:00",
+  "stages": "442211111122223333222211114444"
+}
+Note: stages string uses 1=deep, 2=light, 3=REM, 4=awake (each char = 5 min). Use the sleep_phase_5_min field from API.
+
+7. empty_state - Show when no data is available for a query
+{
+  "type": "empty_state",
+  "title": "No Data Found",
+  "message": "No sleep data available for the requested date range.",
+  "icon": "moon"
+}
+Available icons: moon, activity, heart, zap, alert
+
 Example response format:
 "Based on your sleep data, you got excellent rest last night with 7 hours and 21 minutes of sleep!
 
@@ -126,6 +183,7 @@ export async function POST(request: Request) {
       messages: convertedMessages,
       tools,
       stopWhen: stepCountIs(5), // Allow up to 5 steps for tool calls
+      maxTokens: 4096, // Limit output to leave room for large Oura API responses
       onFinish: async () => {
         await mcpClient.close()
       },

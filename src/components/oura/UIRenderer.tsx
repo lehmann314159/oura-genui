@@ -2,11 +2,21 @@
 
 import { MetricsCard, type MetricsCardProps } from './MetricsCard'
 import { SleepStages, type SleepStagesProps } from './SleepStages'
+import { LineChart, type LineChartProps } from './LineChart'
+import { ReadinessBreakdown, type ReadinessBreakdownProps } from './ReadinessBreakdown'
+import { StatComparison, type StatComparisonProps } from './StatComparison'
+import { SleepTimeline, type SleepTimelineProps } from './SleepTimeline'
+import { EmptyState, type EmptyStateProps } from './EmptyState'
 
 // Define the component types that the LLM can generate
 export type UIComponent =
   | { type: 'metrics_card' } & MetricsCardProps
   | { type: 'sleep_stages' } & SleepStagesProps
+  | { type: 'line_chart' } & LineChartProps
+  | { type: 'readiness_breakdown' } & ReadinessBreakdownProps
+  | { type: 'stat_comparison' } & StatComparisonProps
+  | { type: 'sleep_timeline' } & SleepTimelineProps
+  | { type: 'empty_state' } & EmptyStateProps
 
 export interface UIRendererProps {
   components: UIComponent[]
@@ -41,6 +51,53 @@ export function UIRenderer({ components }: UIRendererProps) {
                 rem={component.rem}
                 light={component.light}
                 awake={component.awake}
+              />
+            )
+          case 'line_chart':
+            return (
+              <LineChart
+                key={index}
+                title={component.title}
+                data={component.data}
+                yAxisLabel={component.yAxisLabel}
+                color={component.color}
+              />
+            )
+          case 'readiness_breakdown':
+            return (
+              <ReadinessBreakdown
+                key={index}
+                score={component.score}
+                contributors={component.contributors}
+              />
+            )
+          case 'stat_comparison':
+            return (
+              <StatComparison
+                key={index}
+                title={component.title}
+                current={component.current}
+                previous={component.previous}
+                unit={component.unit}
+                higherIsBetter={component.higherIsBetter}
+              />
+            )
+          case 'sleep_timeline':
+            return (
+              <SleepTimeline
+                key={index}
+                bedtime_start={component.bedtime_start}
+                bedtime_end={component.bedtime_end}
+                stages={component.stages}
+              />
+            )
+          case 'empty_state':
+            return (
+              <EmptyState
+                key={index}
+                title={component.title}
+                message={component.message}
+                icon={component.icon}
               />
             )
           default:
