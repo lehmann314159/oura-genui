@@ -1,40 +1,27 @@
 services:
   oura-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+    image: lehmann314159/oura-genui-app:latest
+    container_name: oura-app
+    expose:
+      - "3000"
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - MCP_SERVER_URL=http://oura-mcp:8080/sse
     depends_on:
-      oura-mcp:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - oura-mcp
     networks:
-      - oura-network
+      - web
+    restart: unless-stopped
 
   oura-mcp:
-    build:
-      context: ./mcp-server
-      dockerfile: Dockerfile
+    image: lehmann314159/oura-genui-mcp:latest
+    container_name: oura-mcp
     environment:
       - OURA_PERSONAL_ACCESS_TOKEN=${OURA_PERSONAL_ACCESS_TOKEN}
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
     networks:
-      - oura-network
+      - web
+    restart: unless-stopped
 
 networks:
-  oura-network:
-    driver: bridge
+  web:
+    external: true
