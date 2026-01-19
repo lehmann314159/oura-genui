@@ -25,7 +25,7 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'oura-mcp-server' });
 });
 
-// Store active transports for cleanup
+// Store active transports by session ID
 const activeTransports = new Map<string, SSEServerTransport>();
 
 // SSE endpoint for MCP communication
@@ -38,14 +38,13 @@ app.get('/sse', async (req: Request, res: Response) => {
   // Create SSE transport
   const transport = new SSEServerTransport('/message', res);
 
-  // Generate a unique ID for this connection
-  const connectionId = Math.random().toString(36).substring(7);
-  activeTransports.set(connectionId, transport);
+  // Store transport by its session ID for message routing
+  activeTransports.set(transport.sessionId, transport);
 
   // Clean up on connection close
   res.on('close', () => {
     console.log('SSE connection closed');
-    activeTransports.delete(connectionId);
+    activeTransports.delete(transport.sessionId);
   });
 
   // Connect the server to the transport
@@ -54,8 +53,6 @@ app.get('/sse', async (req: Request, res: Response) => {
 
 // Message endpoint for client-to-server communication
 app.post('/message', async (req: Request, res: Response) => {
-  // The SSE transport handles routing messages to the correct connection
-  // based on the session ID in the request
   const sessionId = req.query.sessionId as string;
 
   if (!sessionId) {
@@ -63,9 +60,21 @@ app.post('/message', async (req: Request, res: Response) => {
     return;
   }
 
-  // Find the transport for this session and forward the message
-  // The SSEServerTransport handles this internally
-  res.status(202).json({ received: true });
+  // Find the transport for this session
+  const transport = activeTransports.get(sessionId);
+
+  if (!transport) {
+    res.status(404).json({ error: 'Session not found' });
+    return;
+  }
+
+  // Forward the message to the transport for processing
+  try {
+    await transport.handlePostMessage(req, res);
+  } catch (error) {
+    console.error('Error handling message:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.listen(PORT, () => {
