@@ -93,6 +93,168 @@ export class OuraClient {
 }
 
 /**
+ * Data Filters
+ * Trim Oura API responses to reduce token usage while preserving useful information
+ */
+
+interface OuraSleepRecord {
+  day: string;
+  bedtime_start: string;
+  bedtime_end: string;
+  total_sleep_duration: number;
+  deep_sleep_duration: number;
+  rem_sleep_duration: number;
+  light_sleep_duration: number;
+  awake_time: number;
+  efficiency: number;
+  latency: number;
+  sleep_phase_5_min: string;
+  average_heart_rate: number;
+  lowest_heart_rate: number;
+  average_hrv: number;
+  [key: string]: unknown;
+}
+
+interface OuraReadinessRecord {
+  day: string;
+  score: number;
+  temperature_deviation: number;
+  temperature_trend_deviation: number;
+  contributors: {
+    activity_balance: number;
+    body_temperature: number;
+    hrv_balance: number;
+    previous_day_activity: number;
+    previous_night: number;
+    recovery_index: number;
+    resting_heart_rate: number;
+    sleep_balance: number;
+  };
+  [key: string]: unknown;
+}
+
+interface OuraActivityRecord {
+  day: string;
+  score: number;
+  steps: number;
+  active_calories: number;
+  total_calories: number;
+  high_activity_time: number;
+  medium_activity_time: number;
+  low_activity_time: number;
+  sedentary_time: number;
+  resting_time: number;
+  [key: string]: unknown;
+}
+
+interface OuraHeartRateRecord {
+  bpm: number;
+  source: string;
+  timestamp: string;
+}
+
+interface OuraWorkoutRecord {
+  day: string;
+  activity: string;
+  calories: number;
+  distance: number;
+  start_datetime: string;
+  end_datetime: string;
+  intensity: string;
+  [key: string]: unknown;
+}
+
+interface OuraApiResponse<T> {
+  data: T[];
+  next_token?: string;
+}
+
+function filterSleepData(response: OuraApiResponse<OuraSleepRecord>): object {
+  return {
+    data: response.data.map(record => ({
+      day: record.day,
+      bedtime_start: record.bedtime_start,
+      bedtime_end: record.bedtime_end,
+      total_sleep_duration: record.total_sleep_duration,
+      deep_sleep_duration: record.deep_sleep_duration,
+      rem_sleep_duration: record.rem_sleep_duration,
+      light_sleep_duration: record.light_sleep_duration,
+      awake_time: record.awake_time,
+      efficiency: record.efficiency,
+      latency: record.latency,
+      sleep_phase_5_min: record.sleep_phase_5_min,
+      average_heart_rate: record.average_heart_rate,
+      lowest_heart_rate: record.lowest_heart_rate,
+      average_hrv: record.average_hrv,
+    }))
+  };
+}
+
+function filterReadinessData(response: OuraApiResponse<OuraReadinessRecord>): object {
+  return {
+    data: response.data.map(record => ({
+      day: record.day,
+      score: record.score,
+      temperature_deviation: record.temperature_deviation,
+      temperature_trend_deviation: record.temperature_trend_deviation,
+      contributors: record.contributors,
+    }))
+  };
+}
+
+function filterActivityData(response: OuraApiResponse<OuraActivityRecord>): object {
+  return {
+    data: response.data.map(record => ({
+      day: record.day,
+      score: record.score,
+      steps: record.steps,
+      active_calories: record.active_calories,
+      total_calories: record.total_calories,
+      high_activity_time: record.high_activity_time,
+      medium_activity_time: record.medium_activity_time,
+      low_activity_time: record.low_activity_time,
+      sedentary_time: record.sedentary_time,
+      resting_time: record.resting_time,
+    }))
+  };
+}
+
+function filterHeartRateData(response: OuraApiResponse<OuraHeartRateRecord>): object {
+  const records = response.data;
+  if (records.length === 0) {
+    return { summary: { count: 0 } };
+  }
+
+  const bpmValues = records.map(r => r.bpm);
+  const sum = bpmValues.reduce((a, b) => a + b, 0);
+
+  return {
+    summary: {
+      count: records.length,
+      min_bpm: Math.min(...bpmValues),
+      max_bpm: Math.max(...bpmValues),
+      avg_bpm: Math.round(sum / records.length),
+      first_timestamp: records[0].timestamp,
+      last_timestamp: records[records.length - 1].timestamp,
+    }
+  };
+}
+
+function filterWorkoutData(response: OuraApiResponse<OuraWorkoutRecord>): object {
+  return {
+    data: response.data.map(record => ({
+      day: record.day,
+      activity: record.activity,
+      calories: record.calories,
+      distance: record.distance,
+      start_datetime: record.start_datetime,
+      end_datetime: record.end_datetime,
+      intensity: record.intensity,
+    }))
+  };
+}
+
+/**
  * MCP Server Implementation
  */
 export class OuraMCPServer {
@@ -219,21 +381,31 @@ export class OuraMCPServer {
         let result;
 
         switch (name) {
-          case "get_sleep_data":
-            result = await this.ouraClient.getSleep(typedArgs?.start_date, typedArgs?.end_date);
+          case "get_sleep_data": {
+            const raw = await this.ouraClient.getSleep(typedArgs?.start_date, typedArgs?.end_date);
+            result = filterSleepData(raw);
             break;
-          case "get_activity_data":
-            result = await this.ouraClient.getDailyActivity(typedArgs?.start_date, typedArgs?.end_date);
+          }
+          case "get_activity_data": {
+            const raw = await this.ouraClient.getDailyActivity(typedArgs?.start_date, typedArgs?.end_date);
+            result = filterActivityData(raw);
             break;
-          case "get_readiness_data":
-            result = await this.ouraClient.getDailyReadiness(typedArgs?.start_date, typedArgs?.end_date);
+          }
+          case "get_readiness_data": {
+            const raw = await this.ouraClient.getDailyReadiness(typedArgs?.start_date, typedArgs?.end_date);
+            result = filterReadinessData(raw);
             break;
-          case "get_heart_rate_data":
-            result = await this.ouraClient.getHeartRate(typedArgs?.start_date, typedArgs?.end_date);
+          }
+          case "get_heart_rate_data": {
+            const raw = await this.ouraClient.getHeartRate(typedArgs?.start_date, typedArgs?.end_date);
+            result = filterHeartRateData(raw);
             break;
-          case "get_workout_data":
-            result = await this.ouraClient.getWorkouts(typedArgs?.start_date, typedArgs?.end_date);
+          }
+          case "get_workout_data": {
+            const raw = await this.ouraClient.getWorkouts(typedArgs?.start_date, typedArgs?.end_date);
+            result = filterWorkoutData(raw);
             break;
+          }
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -242,7 +414,7 @@ export class OuraMCPServer {
           content: [
             {
               type: "text",
-              text: JSON.stringify(result, null, 2),
+              text: JSON.stringify(result),
             },
           ],
         };
@@ -384,7 +556,7 @@ Then provide a summary covering:
             {
               uri,
               mimeType: "application/json",
-              text: JSON.stringify(data, null, 2),
+              text: JSON.stringify(data),
             },
           ],
         };
