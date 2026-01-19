@@ -18,7 +18,7 @@ if (!OURA_TOKEN) {
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Note: Don't use express.json() globally - the /message endpoint needs the raw body
 
 // Health check endpoint for Docker
 app.get('/health', (_req: Request, res: Response) => {
